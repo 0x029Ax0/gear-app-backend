@@ -114,7 +114,14 @@ class CategoryController extends Controller
     private function isInUse(Category $category): bool
     {
         foreach (['gear_items', 'items'] as $table) {
-            if (Schema::hasTable($table) && DB::table($table)->where('category_id', $category->id)->exists()) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+            $query = DB::table($table)->where('category_id', $category->id);
+            if (Schema::hasColumn($table, 'deleted_at')) {
+                $query->whereNull('deleted_at');
+            }
+            if ($query->exists()) {
                 return true;
             }
         }
