@@ -11,22 +11,27 @@ return new class extends Migration
         Schema::create('gear_items', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('category_id')->nullable()->constrained()->nullOnDelete();
-            $table->string('name', 200);
-            $table->text('description')->nullable();
+            $table->foreignId('category_id')->constrained()->restrictOnDelete();
+            $table->string('name', 255);
             $table->unsignedInteger('quantity')->default(1);
-            $table->unsignedInteger('weight_grams')->nullable();
+            $table->unsignedInteger('weight_grams')->default(0);
             $table->unsignedBigInteger('price_minor')->nullable();
-            $table->char('currency', 3)->default('USD');
-            $table->boolean('is_owned')->default(false);
-            $table->boolean('is_ordered')->default(false);
+            $table->char('currency_code', 3)->nullable();
+            $table->text('product_url')->nullable();
             $table->string('image_path')->nullable();
+            $table->text('image_source_url')->nullable();
+            $table->boolean('in_possession')->default(false);
+            $table->boolean('ordered')->default(false);
+            $table->text('notes')->nullable();
+            $table->timestamp('imported_at')->nullable();
             $table->timestamps();
             $table->softDeletes();
 
             $table->index(['user_id', 'name']);
             $table->index(['user_id', 'category_id']);
-            $table->index(['user_id', 'is_owned', 'is_ordered']);
+            $table->index(['user_id', 'in_possession']);
+            $table->index(['user_id', 'ordered']);
+            $table->index(['user_id', 'created_at']);
         });
     }
 

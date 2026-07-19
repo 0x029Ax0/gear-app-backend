@@ -9,8 +9,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
-#[Fillable(['user_id', 'category_id', 'name', 'description', 'quantity', 'weight_grams', 'price_minor', 'currency', 'is_owned', 'is_ordered', 'image_path'])]
+#[Fillable(['user_id', 'category_id', 'name', 'quantity', 'weight_grams', 'price_minor', 'currency_code', 'product_url', 'image_path', 'image_source_url', 'in_possession', 'ordered', 'notes', 'imported_at'])]
 class GearItem extends Model
 {
     /** @use HasFactory<GearItemFactory> */
@@ -22,17 +23,18 @@ class GearItem extends Model
             'quantity' => 'integer',
             'weight_grams' => 'integer',
             'price_minor' => 'integer',
-            'is_owned' => 'boolean',
-            'is_ordered' => 'boolean',
+            'in_possession' => 'boolean',
+            'ordered' => 'boolean',
+            'imported_at' => 'datetime',
         ];
     }
 
     protected function status(): Attribute
     {
         return Attribute::get(fn (): string => match (true) {
-            $this->is_owned => 'owned',
-            $this->is_ordered => 'ordered',
-            default => 'planned',
+            $this->in_possession => 'owned',
+            $this->ordered => 'ordered',
+            default => 'wishlist',
         });
     }
 
@@ -41,9 +43,14 @@ class GearItem extends Model
         return Attribute::get(fn (): ?int => $this->weight_grams === null ? null : $this->weight_grams * $this->quantity);
     }
 
-    protected function totalPriceMinor(): Attribute
+    protected function totalValueMinor(): Attribute
     {
         return Attribute::get(fn (): ?int => $this->price_minor === null ? null : $this->price_minor * $this->quantity);
+    }
+
+    protected function imageUrl(): Attribute
+    {
+        return Attribute::get(fn (): ?string => $this->image_path === null ? null : Storage::url($this->image_path));
     }
 
     public function user(): BelongsTo

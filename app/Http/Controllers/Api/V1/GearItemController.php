@@ -21,11 +21,19 @@ class GearItemController extends Controller
         $query = GearItem::query()->where('user_id', $request->user()->id)->with('category');
         $this->applyFilters($query, $request);
 
+        $summaryRows = (clone $query)->get(['quantity', 'weight_grams', 'price_minor', 'currency_code']);
+        $currencies = $summaryRows->pluck('currency_code')->filter()->unique()->values();
         $summary = [
-            'quantity' => (int) (clone $query)->sum('quantity'),
-            'weight_grams' => (int) (clone $query)->selectRaw('COALESCE(SUM(weight_grams * quantity), 0) as total')->value('total'),
-            'price_minor' => (int) (clone $query)->selectRaw('COALESCE(SUM(price_minor * quantity), 0) as total')->value('total'),
+            'item_rows' => $summaryRows->count(),
+            'total_quantity' => (int) $summaryRows->sum('quantity'),
+            'total_weight_grams' => (int) $summaryRows->sum(fn (GearItem $item): int => $item->weight_grams * $item->quantity),
         ];
+        if ($currencies->count() <= 1) {
+            $summary['currency_code'] = $currencies->first();
+            $summary['total_value_minor'] = (int) $summaryRows->sum(fn (GearItem $item): int => (int) $item->price_minor * $item->quantity);
+        } else {
+            $summary['values_by_currency'] = $summaryRows->groupBy('currency_code')->map(fn ($items): int => (int) $items->sum(fn (GearItem $item): int => (int) $item->price_minor * $item->quantity));
+        }
         $items = $query->paginate(min($request->integer('per_page', 20), 100))->withQueryString();
 
         return GearItemResource::collection($items)->additional(['meta' => ['summary' => $summary]]);
@@ -35,7 +43,11 @@ class GearItemController extends Controller
     {
         $data = $request->validated();
         $this->ensureCategoryVisible($request, $data['category_id'] ?? null);
+        $this->ensureValidState($data['in_possession'], $data['ordered']);
         $data['user_id'] = $request->user()->id;
+        if ($data['price_minor'] ?? null) {
+            $data['currency_code'] = strtoupper($data['currency_code']);
+        }
         $item = GearItem::create($data)->load('category');
 
         return response()->json(['data' => new GearItemResource($item)], 201);
@@ -43,6 +55,7 @@ class GearItemController extends Controller
 
     public function show(Request $request, GearItem $gearItem): GearItemResource
     {
+        $this->ensureOwned($request, $gearItem);
         Gate::authorize('view', $gearItem);
 
         return new GearItemResource($gearItem->load('category'));
@@ -50,12 +63,15 @@ class GearItemController extends Controller
 
     public function update(UpdateGearItemRequest $request, GearItem $gearItem): GearItemResource
     {
+        $this->ensureOwned($request, $gearItem);
         Gate::authorize('update', $gearItem);
         $data = $request->validated();
-        if (($data['is_owned'] ?? $gearItem->is_owned) && ($data['is_ordered'] ?? $gearItem->is_ordered)) {
-            throw ValidationException::withMessages(['is_owned' => 'An item cannot be both owned and ordered.']);
-        }
+        $inPossession = $data['in_possession'] ?? $gearItem->in_possession;
+        $ordered = $data['ordered'] ?? $gearItem->ordered;
+        $this->ensureValidState($inPossession, $ordered);
         $this->ensureCategoryVisible($request, $data['category_id'] ?? $gearItem->category_id);
+        $priceMinor = array_key_exists('price_minor', $data) ? $data['price_minor'] : $gearItem->price_minor;
+        $data['currency_code'] = $priceMinor === null ? null : strtoupper($data['currency_code'] ?? $gearItem->currency_code);
         $gearItem->update($data);
 
         return new GearItemResource($gearItem->refresh()->load('category'));
@@ -63,6 +79,7 @@ class GearItemController extends Controller
 
     public function destroy(Request $request, GearItem $gearItem): JsonResponse
     {
+        $this->ensureOwned($request, $gearItem);
         Gate::authorize('delete', $gearItem);
         $gearItem->delete();
 
@@ -71,26 +88,41 @@ class GearItemController extends Controller
 
     private function applyFilters($query, Request $request): void
     {
-        if ($request->filled('search')) {
-            $search = trim((string) $request->input('search'));
+        if ($request->filled('q')) {
+            $search = trim((string) $request->input('q'));
             $query->where(function ($query) use ($search): void {
                 $query->where('name', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%");
+                    ->orWhere('notes', 'like', "%{$search}%");
             });
         }
         if ($request->filled('category_id')) {
             $query->where('category_id', $request->integer('category_id'));
         }
-        foreach (['is_owned', 'is_ordered'] as $flag) {
+        foreach (['in_possession', 'ordered'] as $flag) {
             if ($request->has($flag)) {
                 $query->where($flag, $request->boolean($flag));
             }
         }
-        $allowedSorts = ['name', 'quantity', 'weight_grams', 'price_minor', 'created_at'];
-        $sort = (string) $request->input('sort', 'name');
+        $allowedSorts = ['name', 'quantity', 'weight_grams', 'price_minor', 'created_at', 'updated_at'];
+        $sort = (string) $request->input('sort', '-created_at');
         $direction = str_starts_with($sort, '-') ? 'desc' : 'asc';
         $sort = ltrim($sort, '-');
-        $query->orderBy(in_array($sort, $allowedSorts, true) ? $sort : 'name', $direction);
+        if (! in_array($sort, $allowedSorts, true)) {
+            throw ValidationException::withMessages(['sort' => 'The selected sort is invalid.']);
+        }
+        $query->orderBy($sort, $direction);
+    }
+
+    private function ensureValidState(bool $inPossession, bool $ordered): void
+    {
+        if ($inPossession && $ordered) {
+            throw ValidationException::withMessages(['in_possession' => 'An item cannot be both in possession and ordered.']);
+        }
+    }
+
+    private function ensureOwned(Request $request, GearItem $gearItem): void
+    {
+        abort_unless($gearItem->user_id === $request->user()->id, 404);
     }
 
     private function ensureCategoryVisible(Request $request, ?int $categoryId): void
