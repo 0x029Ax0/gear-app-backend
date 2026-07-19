@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 
 class ProductImportController extends Controller
 {
@@ -29,7 +30,7 @@ class ProductImportController extends Controller
     {
         $key = 'product-import:'.$request->user()->id;
         if (RateLimiter::tooManyAttempts($key, (int) config('product_imports.rate_limit_per_minute'))) {
-            abort(429);
+            throw new TooManyRequestsHttpException(null, 'Too many product imports.');
         }
         RateLimiter::hit($key, 60);
         $data = $request->validated();
