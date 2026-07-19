@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\CategoryController;
 use App\Http\Controllers\Api\V1\GearItemController;
+use App\Http\Controllers\Api\V1\ProductImportController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function (): void {
@@ -24,4 +25,5 @@ Route::prefix('v1')->group(function (): void {
     Route::middleware('auth:sanctum')->apiResource('gear-items', GearItemController::class);
     Route::middleware('auth:sanctum')->post('/gear-items/{gearItem}/image', [GearItemController::class, 'uploadImage']);
     Route::middleware('auth:sanctum')->delete('/gear-items/{gearItem}/image', [GearItemController::class, 'deleteImage']);
+    Route::middleware('auth:sanctum')->apiResource('product-imports', ProductImportController::class)->only(['index', 'store', 'show', 'destroy']);
 });
