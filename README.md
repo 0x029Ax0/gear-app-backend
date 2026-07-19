@@ -21,6 +21,18 @@ Laravel is a web application framework with expressive, elegant syntax. We belie
 
 Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
+## Deployment
+
+The `Test, publish, and deploy` GitHub Actions workflow runs the Laravel test suite and
+frontend build, publishes the production image to GHCR, and then triggers Coolify for
+`https://gear.0x029a.dev`. Images are published as both `ghcr.io/0x029ax0/gear-app-backend:<commit-sha>`
+and `ghcr.io/0x029ax0/gear-app-backend:latest`.
+
+To enable the deployment trigger, add a repository secret named `COOLIFY_WEBHOOK_URL`
+containing the Coolify deploy webhook URL for the `gear.0x029a.dev` application. Do not
+commit or document the secret value. If the secret is not configured, the workflow still
+tests and publishes the image, then explicitly skips the Coolify deployment step.
+
 ## Learning Laravel
 
 Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.

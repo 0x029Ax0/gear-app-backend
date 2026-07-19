@@ -24,7 +24,7 @@ RUN composer install \
     --optimize-autoloader \
     --no-scripts
 
-FROM php:8.3-apache AS runtime
+FROM php:8.4-apache AS runtime
 
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public \
     APP_ENV=production \
