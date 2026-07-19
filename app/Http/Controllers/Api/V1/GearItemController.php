@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Contracts\GearImageStorage;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreGearItemRequest;
 use App\Http\Requests\UpdateGearItemRequest;
@@ -11,11 +12,15 @@ use App\Models\GearItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class GearItemController extends Controller
 {
+    public function __construct(private readonly GearImageStorage $imageStorage) {}
+
     public function index(Request $request): AnonymousResourceCollection
     {
         $query = GearItem::query()->where('user_id', $request->user()->id)->with('category');
@@ -81,9 +86,56 @@ class GearItemController extends Controller
     {
         $this->ensureOwned($request, $gearItem);
         Gate::authorize('delete', $gearItem);
+        $this->imageStorage->delete($gearItem->image_path);
         $gearItem->delete();
 
         return response()->json([], 204);
+    }
+
+    public function uploadImage(Request $request, GearItem $gearItem): GearItemResource
+    {
+        $this->ensureOwned($request, $gearItem);
+        Gate::authorize('update', $gearItem);
+        $image = $request->file('image');
+        $this->validateImage($image);
+
+        $mime = (string) getimagesize($image->getRealPath())['mime'];
+        $path = 'gear-images/'.$request->user()->id.'/'.$gearItem->id.'/'.Str::uuid().'.'.config('gear_images.mime_types')[$mime];
+        $oldPath = $gearItem->image_path;
+        $this->imageStorage->store($image, $path);
+        $gearItem->update(['image_path' => $path]);
+        $this->imageStorage->delete($oldPath);
+
+        return new GearItemResource($gearItem->refresh()->load('category'));
+    }
+
+    public function deleteImage(Request $request, GearItem $gearItem): JsonResponse
+    {
+        $this->ensureOwned($request, $gearItem);
+        Gate::authorize('update', $gearItem);
+        $this->imageStorage->delete($gearItem->image_path);
+        $gearItem->update(['image_path' => null]);
+
+        return response()->json([], 204);
+    }
+
+    private function validateImage(?UploadedFile $image): void
+    {
+        if ($image === null || ! $image->isValid()) {
+            throw ValidationException::withMessages(['image' => 'A valid image is required.']);
+        }
+        if (($image->getSize() ?? PHP_INT_MAX) > (int) config('gear_images.max_bytes')) {
+            throw ValidationException::withMessages(['image' => 'The image may not be larger than 5 MB.']);
+        }
+        $info = @getimagesize($image->getRealPath());
+        $mimeTypes = config('gear_images.mime_types');
+        if ($info === false || ! isset($mimeTypes[$info['mime']])) {
+            throw ValidationException::withMessages(['image' => 'The image must be a JPEG, PNG, or WebP image.']);
+        }
+        $maxDimension = (int) config('gear_images.max_dimension');
+        if ($info[0] > $maxDimension || $info[1] > $maxDimension) {
+            throw ValidationException::withMessages(['image' => 'The image dimensions may not exceed 4096 by 4096 pixels.']);
+        }
     }
 
     private function applyFilters($query, Request $request): void

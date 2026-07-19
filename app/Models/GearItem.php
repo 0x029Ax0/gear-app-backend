@@ -50,7 +50,9 @@ class GearItem extends Model
 
     protected function imageUrl(): Attribute
     {
-        return Attribute::get(fn (): ?string => $this->image_path === null ? null : Storage::url($this->image_path));
+        return Attribute::get(fn (): ?string => $this->image_path === null
+            ? null
+            : Storage::disk(config('gear_images.disk', 'public'))->url($this->image_path));
     }
 
     public function user(): BelongsTo

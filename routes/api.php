@@ -22,4 +22,6 @@ Route::prefix('v1')->group(function (): void {
 
     Route::middleware('auth:sanctum')->apiResource('categories', CategoryController::class);
     Route::middleware('auth:sanctum')->apiResource('gear-items', GearItemController::class);
+    Route::middleware('auth:sanctum')->post('/gear-items/{gearItem}/image', [GearItemController::class, 'uploadImage']);
+    Route::middleware('auth:sanctum')->delete('/gear-items/{gearItem}/image', [GearItemController::class, 'deleteImage']);
 });

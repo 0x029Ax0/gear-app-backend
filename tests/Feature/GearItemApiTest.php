@@ -6,6 +6,8 @@ use App\Models\Category;
 use App\Models\GearItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class GearItemApiTest extends TestCase
@@ -86,5 +88,60 @@ class GearItemApiTest extends TestCase
     {
         $this->getJson('/api/v1/gear-items')->assertUnauthorized();
         $this->postJson('/api/v1/gear-items', ['name' => 'Tent'])->assertUnauthorized();
+    }
+
+    public function test_user_can_upload_replace_and_delete_a_gear_image(): void
+    {
+        Storage::fake('public');
+        $user = User::factory()->create();
+        $category = Category::factory()->for($user)->create();
+        $item = GearItem::factory()->for($user)->create(['category_id' => $category->id]);
+
+        $first = $this->actingAs($user, 'sanctum')->post("/api/v1/gear-items/{$item->id}/image", [
+            'image' => $this->validPng('first.png'),
+        ]);
+        $first->assertOk()->assertJsonPath('data.image_url', fn (string $url): bool => str_contains($url, 'gear-images/'));
+        $firstPath = GearItem::findOrFail($item->id)->image_path;
+        Storage::disk('public')->assertExists($firstPath);
+
+        $this->actingAs($user, 'sanctum')->post("/api/v1/gear-items/{$item->id}/image", [
+            'image' => $this->validPng('second.png'),
+        ])->assertOk();
+        $secondPath = GearItem::findOrFail($item->id)->image_path;
+        $this->assertNotSame($firstPath, $secondPath);
+        Storage::disk('public')->assertMissing($firstPath);
+        Storage::disk('public')->assertExists($secondPath);
+
+        $this->actingAs($user, 'sanctum')->delete("/api/v1/gear-items/{$item->id}/image")
+            ->assertNoContent();
+        Storage::disk('public')->assertMissing($secondPath);
+        $this->assertNull(GearItem::findOrFail($item->id)->image_path);
+    }
+
+    public function test_image_upload_rejects_invalid_content_and_foreign_items(): void
+    {
+        Storage::fake('public');
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        $category = Category::factory()->for($user)->create();
+        $otherCategory = Category::factory()->for($other)->create();
+        $item = GearItem::factory()->for($user)->create(['category_id' => $category->id]);
+        $foreign = GearItem::factory()->for($other)->create(['category_id' => $otherCategory->id]);
+
+        $this->actingAs($user, 'sanctum')->post("/api/v1/gear-items/{$item->id}/image", [
+            'image' => UploadedFile::fake()->createWithContent('not-image.txt', 'not an image'),
+        ])->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_FAILED');
+
+        $this->actingAs($user, 'sanctum')->post("/api/v1/gear-items/{$foreign->id}/image", [
+            'image' => $this->validPng(),
+        ])->assertNotFound();
+    }
+
+    private function validPng(string $name = 'image.png'): UploadedFile
+    {
+        return UploadedFile::fake()->createWithContent($name, base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+            true,
+        ));
     }
 }
