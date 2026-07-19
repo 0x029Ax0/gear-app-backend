@@ -36,7 +36,7 @@ class StoreGearItemRequest extends FormRequest
                 $this->merge([$field => trim($this->input($field))]);
             }
         }
-        if ($this->input('price_minor') === null) {
+        if ($this->has('price_minor') && $this->input('price_minor') === null) {
             $this->merge(['currency_code' => null]);
         }
     }

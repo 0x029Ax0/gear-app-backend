@@ -45,6 +45,18 @@ jobs:
           touch database/database.sqlite
           php artisan migrate --force
 
+      - name: Validate OpenAPI contract
+        run: |
+          ruby <<'RUBY'
+          require 'yaml'
+          document = YAML.safe_load_file('docs/openapi.yaml', permitted_classes: [], aliases: false)
+          abort 'OpenAPI document must be an object' unless document.is_a?(Hash)
+          abort 'OpenAPI document is missing paths' unless document['openapi'] == '3.0.3' && document['paths'].is_a?(Hash) && document['paths'].any?
+          RUBY
+
+      - name: Validate API route registration
+        run: php artisan route:list --path=api/v1 --except-vendor
+
       - name: Install JavaScript dependencies
         run: npm ci
 

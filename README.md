@@ -1,70 +1,113 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Gear API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel 13 API for managing personal gear inventories. It provides Sanctum
+bearer authentication, system and user-owned categories, owner-scoped gear CRUD,
+validated image uploads, and queued product imports from public product pages.
 
-## About Laravel
+## Requirements
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.3+ with `mbstring`, `fileinfo`, `gd`, and a PDO driver
+- Composer 2
+- Node.js 22+ and npm
+- PostgreSQL for normal development/production (SQLite is convenient for tests)
+- A queue worker and scheduler process in every non-local deployment
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Deployment
-
-The `Test, publish, and deploy` GitHub Actions workflow runs the Laravel test suite and
-frontend build, publishes the production image to GHCR, and then triggers Coolify for
-`https://gear.0x029a.dev`. Images are published as both `ghcr.io/0x029ax0/gear-app-backend:<commit-sha>`
-and `ghcr.io/0x029ax0/gear-app-backend:latest`.
-
-To enable the deployment trigger, add a repository secret named `COOLIFY_WEBHOOK_URL`
-containing the Coolify deploy webhook URL for the `gear.0x029a.dev` application. Do not
-commit or document the secret value. If the secret is not configured, the workflow still
-tests and publishes the image, then explicitly skips the Coolify deployment step.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Local setup
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone <repository-url> gear-app-backend
+cd gear-app-backend
+composer install
+cp .env.example .env
+php artisan key:generate
+# Set DB_* in .env, then:
+php artisan migrate --seed
+npm ci
+npm run build
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+The bundled `composer setup` script performs the install, environment creation,
+key generation, migration, and frontend build. Never commit `.env` or an
+`APP_KEY`; use a secret manager for deployed environments.
 
-## Contributing
+## Configuration
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+`.env.example` documents the complete runtime surface. The important production
+settings are:
 
-## Code of Conduct
+- `APP_ENV=production`, `APP_DEBUG=false`, and a real `APP_KEY`.
+- `DB_*` for PostgreSQL. The application also supports SQLite for tests.
+- `FILESYSTEM_DISK`, `GEAR_IMAGES_DISK`, and `PRODUCT_IMPORT_IMAGE_DISK` for
+  image storage.
+- `QUEUE_CONNECTION=database` (the default) and the `DB_QUEUE_*` settings.
+- `PRODUCT_IMPORT_*` limits for URL validation, fetch size, image size, rate
+  limiting, pending jobs, redirects, and import expiry.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Images are stored through Laravel's filesystem abstraction. For a public local
+disk, run `php artisan storage:link`; for object storage, configure the disk and
+set `GEAR_IMAGES_DISK`/`PRODUCT_IMPORT_IMAGE_DISK` accordingly.
 
-## Security Vulnerabilities
+## Database, queues, and scheduler
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Run migrations with `php artisan migrate --force`. The default database queue
+requires the jobs migration and a long-running worker:
 
-## License
+```bash
+php artisan queue:work --tries=3 --timeout=120
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Product imports are dispatched asynchronously. Poll `GET /api/v1/product-imports/{id}`
+until its status is `completed` or `failed`. Run the Laravel scheduler every
+minute; it removes expired import records hourly:
+
+```cron
+* * * * * cd /var/www/html && php artisan schedule:run >> /dev/null 2>&1
+```
+
+The `product-imports:cleanup` command can also be run manually. In containers,
+run the web server, queue worker, and scheduler as separate supervised processes.
+
+## API
+
+The complete OpenAPI 3.0.3 contract is in [docs/openapi.yaml](docs/openapi.yaml).
+All endpoints are under `/api/v1`. Register or log in to obtain a Sanctum bearer
+token, then send `Authorization: Bearer <token>` for protected resources.
+
+Main resources:
+
+- `GET /api/v1/health`
+- `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `GET /api/v1/auth/me`, `POST /api/v1/auth/logout`
+- `GET|POST /api/v1/categories`, `GET|PUT|DELETE /api/v1/categories/{category}`
+- `GET|POST /api/v1/gear-items`, `GET|PUT|DELETE /api/v1/gear-items/{gear_item}`
+- `POST|DELETE /api/v1/gear-items/{gearItem}/image`
+- `GET|POST /api/v1/product-imports`, `GET|DELETE /api/v1/product-imports/{product_import}`
+
+API errors use a stable `{message, code}` shape; validation errors additionally
+include an `errors` map. User-owned resources are scoped to the authenticated
+user, and foreign resources return `404` rather than leaking existence.
+
+Product imports only accept public HTTP(S) URLs. DNS resolution, redirects,
+response size, content type, and image downloads are bounded to reduce SSRF and
+resource-exhaustion risk. Do not disable these limits in production without a
+review of the threat model.
+
+## Verification
+
+```bash
+vendor/bin/pint --test
+php artisan test
+npm run build
+git diff --check
+```
+
+The GitHub Actions workflow runs the PHP test suite, OpenAPI YAML parsing,
+frontend build, and Docker build/publish. It publishes immutable SHA and
+`latest` images to GHCR. Configure the repository secret
+`COOLIFY_WEBHOOK_URL` to trigger the Coolify deployment; without it, tests and
+image publication still run and deployment is explicitly skipped.
+
+## License and security
+
+This project is released under the MIT license. Do not report security issues in
+public tickets; contact the project maintainer privately with reproduction steps.
