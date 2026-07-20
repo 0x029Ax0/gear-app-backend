@@ -11,6 +11,7 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
+use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -23,6 +24,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('product-imports:cleanup')->hourly();
     })
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustProxies(at: '*', headers: SymfonyRequest::HEADER_X_FORWARDED_TRAEFIK);
+
         $middleware->redirectGuestsTo(function (Request $request): ?string {
             return $request->is('api/*') ? null : route('login');
         });

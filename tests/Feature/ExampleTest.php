@@ -15,6 +15,15 @@ class ExampleTest extends TestCase
             ->assertSee('Explore the API');
     }
 
+    public function test_public_landing_page_uses_forwarded_https_for_assets(): void
+    {
+        $this->withHeader('X-Forwarded-Proto', 'https')
+            ->get('/')
+            ->assertOk()
+            ->assertSee('https://localhost/build/assets/app-', false)
+            ->assertDontSee('http://localhost/build/assets/app-', false);
+    }
+
     public function test_openapi_document_is_publicly_available(): void
     {
         $this->get('/docs/openapi.yaml')
