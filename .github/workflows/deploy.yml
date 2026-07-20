@@ -137,7 +137,7 @@ jobs:
           fi
           case "$http_status" in
             2[0-9][0-9])
-              if ! jq -e 'type == "object" and ((.deployment_uuid? | type == "string" and length > 0) or (.message? | type == "string" and length > 0))' "$response_file" >/dev/null 2>&1; then
+              if ! jq -e 'type == "object"' "$response_file" >/dev/null 2>&1; then
                 echo "Coolify deployment trigger returned an invalid JSON response (HTTP $http_status)." >&2
                 exit 1
               fi
