@@ -50,6 +50,9 @@ COPY --from=vendor /app/vendor ./vendor
 COPY . .
 COPY --from=frontend /app/public/build ./public/build
 
+COPY docker/gear-entrypoint.sh /usr/local/bin/gear-entrypoint
+RUN chmod +x /usr/local/bin/gear-entrypoint
+
 RUN php artisan package:discover --ansi \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache \
@@ -57,7 +60,7 @@ RUN php artisan package:discover --ansi \
 
 EXPOSE 80
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl --fail --silent http://127.0.0.1/up || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD if [ "${GEAR_PROCESS:-web}" = "queue" ]; then php artisan migrate:status --no-ansi >/dev/null; else curl --fail --silent http://127.0.0.1/up; fi
 
-CMD ["apache2-foreground"]
+CMD ["gear-entrypoint"]
