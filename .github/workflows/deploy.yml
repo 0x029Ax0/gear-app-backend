@@ -117,6 +117,8 @@ jobs:
           test -n "$COOLIFY_RESOURCE_UUID" || { echo 'COOLIFY_RESOURCE_UUID is not configured.' >&2; exit 1; }
           test -n "$COOLIFY_TOKEN" || { echo 'COOLIFY_TOKEN is not configured.' >&2; exit 1; }
           echo "::add-mask::$COOLIFY_TOKEN"
+          token_var='COOLIFY_TOKEN'
+          token="${!token_var}"
           response_file="$(mktemp)"
           trap 'rm -f "$response_file"' EXIT
           if ! http_status="$(curl --show-error --silent \
@@ -126,7 +128,7 @@ jobs:
             --write-out '%{http_code}' \
             --request GET \
             --url "$COOLIFY_URL/api/v1/deploy?uuid=$COOLIFY_RESOURCE_UUID&force=false" \
-            --header "Authorization: Bearer $COOLIFY_TOKEN" \
+            --header "Authorization: Bearer $token" \
             --header 'Accept: application/json')"; then
             echo 'Coolify deployment trigger could not be reached.' >&2
             exit 1
