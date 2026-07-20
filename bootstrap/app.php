@@ -23,7 +23,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('product-imports:cleanup')->hourly();
     })
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->redirectGuestsTo(function (Request $request): ?string {
+            return $request->is('api/*') ? null : route('login');
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
