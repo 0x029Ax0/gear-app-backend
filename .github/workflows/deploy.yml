@@ -105,7 +105,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      IMAGE_REF: ${{ env.IMAGE_NAME }}:latest
       COOLIFY_URL: ${{ vars.COOLIFY_URL }}
       COOLIFY_RESOURCE_UUID: ${{ vars.COOLIFY_RESOURCE_UUID }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -142,7 +141,7 @@ jobs:
                 echo "Coolify deployment trigger returned an invalid JSON response (HTTP $http_status)." >&2
                 exit 1
               fi
-              echo "Coolify deployment trigger accepted (HTTP $http_status) for $IMAGE_REF; verify the application health at https://gear.0x029a.dev."
+              echo "Coolify deployment trigger accepted (HTTP $http_status) for the latest GHCR image; verify the application health at https://gear.0x029a.dev."
               ;;
             *)
               echo "Coolify deployment trigger failed (HTTP $http_status)." >&2
