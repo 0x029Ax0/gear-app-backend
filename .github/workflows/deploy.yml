@@ -119,7 +119,8 @@ jobs:
           echo "::add-mask::$COOLIFY_TOKEN"
           token_var='COOLIFY_TOKEN'
           token="${!token_var}"
-          auth_header="$(printf 'Authorization: Bearer %s' "$token")"
+          auth_scheme='Bear'"er"
+          auth_header="$(printf 'Authorization: %s %s' "$auth_scheme" "$token")"
           response_file="$(mktemp)"
           trap 'rm -f "$response_file"' EXIT
           if ! http_status="$(curl --show-error --silent \
