@@ -36,12 +36,12 @@ RUN apt-get update \
         curl \
         libicu-dev \
         libonig-dev \
+        libpq-dev \
         libsqlite3-dev \
         libzip-dev \
-    && docker-php-ext-install -j"$(nproc)" intl mbstring opcache pdo_mysql pdo_sqlite zip \
+    && docker-php-ext-install -j"$(nproc)" intl mbstring opcache pdo_mysql pdo_pgsql pdo_sqlite zip \
     && a2enmod rewrite \
     && sed -ri "s!/var/www/html!${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf \
-    && apt-get purge -y --auto-remove libicu-dev libonig-dev libsqlite3-dev libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /var/www/html
